@@ -1,0 +1,36 @@
+#-----------The first step is to create Spark Session and all spark SQL functionalities--------------
+
+from pyspark.sql import SparkSession
+import pyspark.sql.functions as fn
+import pyspark.sql.types as typ
+
+spark = SparkSession.builder.getOrCreate()
+
+#-----------Import the csv files and creating a dataframe for the two datasets----------------
+
+weather = spark.read.csv("/FileStore/tables/weather_20160301-75f39.csv", header = True)
+weather2 = spark.read.csv("/FileStore/tables/weather_20160201-f2907.csv", header = True)
+
+
+#----------Converting the csv files into parquets files--------------
+
+weather = spark.read.csv("/FileStore/tables/weather_20160301-75f39.csv", header = True)
+weather2 = spark.read.csv("/FileStore/tables/weather_20160201-f2907.csv", header = True)
+weather.write.mode("overwrite").parquet("/FileStore/tables/weather_20160301-75f39.parquet")
+weather2.write.mode("overwrite").parquet("/FileStore/tables/weather_20160201-f2907.parquet")
+
+#----------Joining the two weather tables together in a dataframe (weatherData) using the union command-----------
+
+weatherData = weather.union(weather2)
+
+#-----------Creating a temporary view table "weatherData" to be queryable--------
+
+weatherData.createOrReplaceTempView('weatherData')
+
+#-----------Querying the weatherData to solve the solutions---------
+
+spark.sql("SELECT Region,ObservationDate,ScreenTemperature FROM weatherData WHERE ScreenTemperature IN (SELECT MAX(ScreenTemperature) FROM data)").show()
+
+
+
+
