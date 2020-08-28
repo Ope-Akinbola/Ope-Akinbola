@@ -1,36 +1,80 @@
-#-----------The first step is to create Spark Session and all spark SQL functionalities--------------
+### Import all spark modules and libraries needed
 
-from pyspark.sql import SparkSession
-import pyspark.sql.functions as fn
-import pyspark.sql.types as typ
+from pyspark.sql import SparkSession 
+from pyspark.sql.types import *
+import pyspark.sql.functions as F
+from pyspark.sql.functions import col
+spark = SparkSession.builder.getOrCreate()
+
+### create Spark session
 
 spark = SparkSession.builder.getOrCreate()
 
-#-----------Import the csv files and creating a dataframe for the two datasets----------------
+### Import the csv files and creating a dataframe for the two datasets and infer schema
 
-weather = spark.read.csv("/FileStore/tables/weather_20160301-75f39.csv", header = True)
-weather2 = spark.read.csv("/FileStore/tables/weather_20160201-f2907.csv", header = True)
+file_location1 = "weather.20160201.csv"
+file_location2 = "weather.20160301.csv"
+file_type = "csv"
 
+# CSV options
 
-#----------Converting the csv files into parquets files--------------
+infer_schema = "True"
+first_row_is_header = "True"
+delimiter = ","
 
-weather = spark.read.csv("/FileStore/tables/weather_20160301-75f39.csv", header = True)
-weather2 = spark.read.csv("/FileStore/tables/weather_20160201-f2907.csv", header = True)
-weather.write.mode("overwrite").parquet("/FileStore/tables/weather_20160301-75f39.parquet")
-weather2.write.mode("overwrite").parquet("/FileStore/tables/weather_20160201-f2907.parquet")
+WeatherSchema = StructType([
+  StructField("ForecastSiteCode",IntegerType()),
+  StructField("Time",IntegerType()),
+  StructField("Date",TimestampType()),
+  StructField("WindDirection",IntegerType()),
+  StructField("WindSpeed",IntegerType()),
+  StructField("WindGust",IntegerType()),
+  StructField("Visibility",IntegerType()),
+  StructField("Temperature",DoubleType()),
+  StructField("Pressure",IntegerType()),
+  StructField("WeatherCode",IntegerType()),
+  StructField("SiteName",StringType()),
+  StructField("Latitude",DoubleType()),
+  StructField("Longitude",DoubleType()),
+  StructField("Region",StringType()),
+  StructField("COUNTRY",StringType())
+])
 
-#----------Joining the two weather tables together in a dataframe (weatherData) using the union command-----------
+df1 = spark.read.format(file_type) \
+  .schema(WeatherSchema)\
+  .option("header", first_row_is_header) \
+  .option("mode", "failFast") \
+  .option("sep", delimiter) \
+  .load(file_location1)
 
+df1.count()
+
+### Get the number of partitions in the dataset
+
+print(df1.rdd.getNumPartitions(), df1.rdd.getNumPartitions())
+
+### write the file in parquet file for optimisation
+
+weatherDataCombined = df1.union(df2)
+weatherDataCombined.write.format("parquet").mode("overwrite").save("weatherDataCombined.parquet")
 weatherData = weather.union(weather2)
 
-#-----------Creating a temporary view table "weatherData" to be queryable--------
+##  Creating a temporary view table
 
-weatherData.createOrReplaceTempView('weatherData')
+weather = spark.read.parquet("weatherDataCombined.parquet") 
+weather.createOrReplaceTempView('weather')           
+spark.catalog.cacheTable("weather")
+weather.count()
 
 #-----------Querying the weatherData to solve the solutions---------
 
-spark.sql("SELECT Region,ObservationDate,ScreenTemperature FROM weatherData WHERE ScreenTemperature IN (SELECT MAX(ScreenTemperature) FROM data)").show()
+spark.sql("SELECT Region,Date,Temperature FROM weather WHERE Temperature IN (SELECT MAX(Temperature) FROM weather)").show()
 
+## Getting the maximum temperature by date and origin
 
+maxTemperature = weather.selectExpr("max(Temperature)")
+maxTemperature.show()
 
+Table1 = weather.select("Date", "Region", "Temperature")
+Table1.filter(col("Temperature") == 15.8).show()
 
